@@ -1,79 +1,120 @@
 import { decodeBase64, encodeBase64 } from "jsr:@std/encoding/base64";
 import * as path from "jsr:@std/path";
-import { Application } from "jsr:@oak/oak/application";
-import { Router } from "jsr:@oak/oak/router";
 
 const CHUNK_SIZE = 400;
 const Utf8Decoder = new TextDecoder();
 
 if (import.meta.main) {
-  main();
-}
-
-function main() {
-  const router = new Router();
-  router.get("/:path(.*)", async (ctx) => {
-    const filename = ctx.params.path;
-
-    if (!filename) {
-      // TODO: make error handling consistent, use oak facilities to provide a backstop and consistent error format, throw (maybe typed) everywhere else
-      throw new Error("Not found");
-    }
-
-    const params = ctx.request.url.searchParams;
-
-    const numResults = params.get("n");
-    const searchString = params.get("s");
-    const continuationToken = params.get("cont");
-
-    // TODO: further request validation?
-
-    let searchOptions: SearchOptions = {};
-
-    if (continuationToken) {
-      if (searchString || numResults) {
-        throw new Error("Cannot specify a search in a continuation request.");
-      }
-      searchOptions = decodeContinuationToken(continuationToken);
-    }
-    
-    if (searchString) {
-      // TODO: validate the search string? cap its length?
-      searchOptions.query = { text: searchString }
-    }
-
-    if (numResults) {
-      searchOptions.maxResults = parseInt(numResults, 10);
-    }
-
-    // TODO: prevent traversal
-    const resolvedFilename = path.join(Deno.cwd(), filename);
-
-    const searchResults = await searchLog(resolvedFilename, searchOptions);
-
-    let nextContinuationToken: string | undefined;
-    if (searchResults.resumeFrom) {
-      nextContinuationToken = encodeContinuationToken(searchResults.resumeFrom, searchOptions.maxResults, searchOptions.query);
-    }
-
-    ctx.response.body = {
-      entries: searchResults.entries,
-      cont: nextContinuationToken,
-    };
-  });
-
-  const app = new Application();
   const port = 1065;
-
-  app.use(router.routes());
-  app.use(router.allowedMethods());
-
-  console.log(`Logserv running on http://localhost:${port}/`);
-
-  app.listen({ port });
+  // TODO: make error handling consistent, use oak facilities to provide a backstop and consistent error format, throw (maybe typed) everywhere else
+  Deno.serve({
+      port,
+      onError(error) {
+        if (error instanceof Deno.errors.NotFound) {
+          return notFound();
+        }
+        console.error("Unexpected Error:", error);
+        return unexpected();
+      }
+    },
+    searchLogHandler,
+  );
 }
 
-function encodeContinuationToken(resumeFrom: number, maxResults?: number, query?: Query) {
+export async function searchLogHandler(request: Request) {
+  // TODO: unit and api tests
+  // TODO: build
+  // TODO: docker
+  // TODO: readme
+  // TODO: primary
+  // TODO: pick chunk size
+  // TODO: perf
+
+  if (request.method !== "GET") {
+    return notFound();
+  }
+
+  const url = new URL(request.url);
+  const filename = url.pathname;
+
+  if (!filename) {
+    return notFound();
+  }
+
+  const params = url.searchParams;
+
+  const numResults = params.get("n");
+  const searchString = params.get("s");
+  const continuationToken = params.get("cont");
+
+  // TODO: further request validation?
+
+  let searchOptions: SearchOptions = {};
+
+  if (continuationToken) {
+    if (searchString || numResults) {
+      return badRequest("Cannot specify a search in a continuation request.");
+    }
+    searchOptions = decodeContinuationToken(continuationToken);
+  }
+
+  if (searchString) {
+    // TODO: validate the search string? cap its length?
+    searchOptions.query = { text: searchString };
+  }
+
+  if (numResults) {
+    searchOptions.maxResults = parseInt(numResults, 10);
+  }
+
+  // TODO: prevent traversal
+  const resolvedFilename = path.join(Deno.cwd(), filename);
+
+  const searchResults = await searchLog(resolvedFilename, searchOptions);
+
+  let nextContinuationToken: string | undefined;
+  if (searchResults.resumeFrom) {
+    nextContinuationToken = encodeContinuationToken(
+      searchResults.resumeFrom,
+      searchOptions.maxResults,
+      searchOptions.query,
+    );
+  }
+
+  const body = {
+    entries: searchResults.entries,
+    cont: nextContinuationToken,
+  };
+
+  return new Response(JSON.stringify(body, null, 2) + "\n");
+}
+
+function notFound(msg: string = "Not Found") {
+  return new Response(JSON.stringify({ error: msg }) + "\n", {
+    status: 404,
+    statusText: "Not Found",
+  });
+}
+
+function badRequest(msg: string = "Bad Request") {
+  return new Response(JSON.stringify({ error: msg }) + "\n", {
+    status: 400,
+    statusText: "Bad Request",
+  });
+}
+
+function unexpected(msg: string = "Internal Server Error") {
+  return new Response(JSON.stringify({ error: msg }) + "\n", {
+    status: 500,
+    statusText: "Internal Server Error",
+  });
+}
+
+function encodeContinuationToken(
+  resumeFrom: number,
+  maxResults?: number,
+  query?: Query,
+) {
   const json = JSON.stringify([resumeFrom, maxResults, query]);
   const encoded = encodeBase64(json);
 
@@ -88,7 +129,7 @@ function decodeContinuationToken(token: string) {
   const result: SearchOptions = {
     resumeFrom,
     maxResults,
-    query
+    query,
   };
 
   return result;
@@ -98,9 +139,9 @@ type KeywordSearch = { text: string };
 type Query = KeywordSearch;
 
 type SearchOptions = {
-  maxResults?: number,
-  query?: Query,
-  resumeFrom?: number,
+  maxResults?: number;
+  query?: Query;
+  resumeFrom?: number;
 };
 
 const defaultSearchOptions = {
@@ -119,8 +160,8 @@ export async function searchLog(filename: string, options: SearchOptions = {}) {
 
   for await (const lineChunk of linesReverse(filename, startingOffset)) {
     earliestOffset = lineChunk.offset;
-    const line = Utf8Decoder.decode(lineChunk.bytes); // TODO: handle malformed data
-    
+    const line = Utf8Decoder.decode(lineChunk.bytes); // TODO: do we _really_ have to convert this to string here? can we not match in arrays? what about regex?
+
     if (!line) {
       continue;
     }
@@ -136,7 +177,7 @@ export async function searchLog(filename: string, options: SearchOptions = {}) {
 
   return {
     entries,
-    resumeFrom: earliestOffset
+    resumeFrom: earliestOffset,
   };
 }
 
@@ -157,7 +198,10 @@ export async function* linesReverse(filename: string, startingOffset?: number) {
         if (partialLine === null) {
           partialLine = subChunk(chunk, 0, lineEnding);
         } else {
-          partialLine = concatChunks(subChunk(chunk, 0, lineEnding), partialLine); // TODO: handle very large entries.
+          partialLine = concatChunks(
+            subChunk(chunk, 0, lineEnding),
+            partialLine,
+          ); // TODO: handle very large entries.
         }
 
         // move on to the next chunk
@@ -188,9 +232,16 @@ export async function* linesReverse(filename: string, startingOffset?: number) {
 /**
  * Opens the specified file and yields chunks of the specified size starting from the end of the file and working backwards.
  */
-export async function* chunksReverse(filename: string, startingOffset?: number) {
+export async function* chunksReverse(
+  filename: string,
+  startingOffset?: number,
+) {
   // TODO: how does this fail?
-  using file = await Deno.open(filename, { read: true, write: false, create: false });
+  using file = await Deno.open(filename, {
+    read: true,
+    write: false,
+    create: false,
+  });
   const { size } = await file.stat();
 
   if (startingOffset && startingOffset > size) {
@@ -230,8 +281,8 @@ async function readChunk(file: Deno.FsFile, start: number, size: number) {
 }
 
 type FileChunk = {
-  offset: number,
-  bytes: Uint8Array,
+  offset: number;
+  bytes: Uint8Array;
 };
 
 function Chunk(offset: number, bytes: Uint8Array) {
@@ -261,4 +312,3 @@ function concatByteArrays(a: Uint8Array, b: Uint8Array): Uint8Array {
   result.set(b, a.length);
   return result;
 }
-
