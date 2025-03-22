@@ -51,7 +51,7 @@ export async function searchLog(filename: string, options: SearchOptions = { max
  * Opens the specified file and yields lines of text starting at the end of the file and working backwards.
  */
 export async function* linesReverse(filename: string) {
-  let partial: FileChunk | null = null;
+  let partialLine: FileChunk | null = null;
 
   for await (const chunk of chunksReverse(filename)) {
     let lineEnding = chunk.bytes.length;
@@ -60,12 +60,11 @@ export async function* linesReverse(filename: string) {
       const prevLineEnding = chunk.bytes.lastIndexOf(10, lineEnding - 1); // 10 === '\n'
 
       if (prevLineEnding === -1) {
-        // we've reached the beginning of the chunk, so we need to save off the partial line
-        const beginningChunk = subChunk(chunk, 0, lineEnding);
-        if (partial === null) {
-          partial = beginningChunk;
+        // we've reached the beginning of the chunk, so we need to save off the partial line since it may be continued in the next chunk.
+        if (partialLine === null) {
+          partialLine = subChunk(chunk, 0, lineEnding);
         } else {
-          partial = concatChunks(beginningChunk, partial); // TODO: handle very large entries.
+          partialLine = concatChunks(subChunk(chunk, 0, lineEnding), partialLine); // TODO: handle very large entries.
         }
 
         // move on to the next chunk
@@ -73,23 +72,23 @@ export async function* linesReverse(filename: string) {
       }
 
       const lineStart = prevLineEnding + 1;
-      const lineChunk = subChunk(chunk, lineStart, lineEnding);
+      const line = subChunk(chunk, lineStart, lineEnding);
 
-      if (partial !== null) {
-        const result = concatChunks(lineChunk, partial);
-        partial = null;
+      if (partialLine !== null) {
+        const result = concatChunks(line, partialLine);
+        partialLine = null;
         yield result;
       } else {
-        yield lineChunk;
+        yield line;
       }
 
       lineEnding = prevLineEnding;
     }
   }
 
-  if (partial !== null) {
-    yield partial;
-    partial = null;
+  if (partialLine !== null) {
+    yield partialLine;
+    partialLine = null;
   }
 }
 
