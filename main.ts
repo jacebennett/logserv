@@ -1,74 +1,96 @@
 const CHUNK_SIZE = 400;
+const Utf8Decoder = new TextDecoder();
 
 if (import.meta.main) {
   main();
 }
 
+// TODO: pagination requires that we surface the offset of the log entries so we can capture where to resume the search in a continuation token. That also implies that our search functions should allow us to supply an offset from which to start searching.
+
 async function main() {
   const filename = "fodder/simple.log";
-  const decoder = new TextDecoder();
 
-  for await (const line of linesReverse(filename)) {
-    console.log(decoder.decode(line));
-  }
+  const results = await searchLog(filename, {
+    maxResults: 6,
+    query: { text: "status" },
+  })
+  
+  console.log(JSON.stringify({ results }, null, 2));
 }
 
+type Query = { text: string };
+
+type SearchOptions = {
+  maxResults: number,
+  query?: Query,
+};
+
+// TODO: make all options optional, come up with a default options object, and merge it with provided options in the function.
+
+export async function searchLog(filename: string, options: SearchOptions = { maxResults: 100 }) {
+  const results = [];
+
+  const searchText = options.query?.text;
+  const maxResults = options.maxResults;
+
+  for await (const lineChunk of linesReverse(filename)) {
+    const line = Utf8Decoder.decode(lineChunk.bytes); // TODO: handle malformed data
+    if (!searchText || line.includes(searchText)) {
+      results.push(line);
+
+      if (results.length === maxResults) {
+        break;
+      }
+    }
+  }
+
+  return results;
+}
 
 /**
  * Opens the specified file and yields lines of text starting at the end of the file and working backwards.
  */
 export async function* linesReverse(filename: string) {
-  const chunker = chunksReverse(filename);
-  let partial: Uint8Array | null = null;
+  let partial: FileChunk | null = null;
 
-  try {
-    for await (const chunk of chunker) {
-      let lineEnding = chunk.length;
+  for await (const chunk of chunksReverse(filename)) {
+    let lineEnding = chunk.bytes.length;
 
-      while (true) {
-        const prevLineEnding = chunk.lastIndexOf(10, lineEnding - 1); // 10 === '\n'
+    while (true) {
+      const prevLineEnding = chunk.bytes.lastIndexOf(10, lineEnding - 1); // 10 === '\n'
 
-        if (prevLineEnding === -1) {
-          // we've reached the beginning of the chunk, so we need to save off the partial line
-          if (partial === null) {
-            partial = chunk.subarray(0, lineEnding);
-          } else {
-            partial = concatByteArrays(chunk.subarray(0, lineEnding), partial);
-          }
-
-          // move on to the next chunk
-          break;
-        }
-
-        const lineStart = prevLineEnding + 1;
-        
-        if (partial !== null) {
-          const line = concatByteArrays(chunk.subarray(lineStart, lineEnding), partial);
-          partial = null;
-          yield line;
+      if (prevLineEnding === -1) {
+        // we've reached the beginning of the chunk, so we need to save off the partial line
+        const beginningChunk = subChunk(chunk, 0, lineEnding);
+        if (partial === null) {
+          partial = beginningChunk;
         } else {
-          yield chunk.subarray(lineStart, lineEnding);
+          partial = concatChunks(beginningChunk, partial); // TODO: handle very large entries.
         }
 
-        lineEnding = prevLineEnding;
+        // move on to the next chunk
+        break;
       }
-    }
 
-    if (partial !== null) {
-      yield partial;
-      partial = null;
+      const lineStart = prevLineEnding + 1;
+      const lineChunk = subChunk(chunk, lineStart, lineEnding);
+
+      if (partial !== null) {
+        const result = concatChunks(lineChunk, partial);
+        partial = null;
+        yield result;
+      } else {
+        yield lineChunk;
+      }
+
+      lineEnding = prevLineEnding;
     }
   }
-  finally {
-    chunker.return();
-  }
-}
 
-function concatByteArrays(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const result = new Uint8Array(a.length + b.length);
-  result.set(a, 0);
-  result.set(b, a.length);
-  return result;
+  if (partial !== null) {
+    yield partial;
+    partial = null;
+  }
 }
 
 /**
@@ -107,5 +129,39 @@ async function readChunk(file: Deno.FsFile, start: number, size: number) {
     bytesRead += read;
   }
 
-  return buffer;
+  return Chunk(start, buffer);
 }
+
+type FileChunk = {
+  offset: number,
+  bytes: Uint8Array,
+};
+
+function Chunk(offset: number, bytes: Uint8Array) {
+  const result: FileChunk = { offset, bytes };
+  return result;
+}
+
+function subChunk(chunk: FileChunk, start: number, end: number) {
+  // TODO: maybe bounds checks
+  return Chunk(chunk.offset + start, chunk.bytes.subarray(start, end));
+}
+
+function concatChunks(a: FileChunk, b: FileChunk) {
+  // TODO: maybe check adjacency
+
+  const result: FileChunk = {
+    offset: a.offset,
+    bytes: concatByteArrays(a.bytes, b.bytes),
+  };
+
+  return result;
+}
+
+function concatByteArrays(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const result = new Uint8Array(a.length + b.length);
+  result.set(a, 0);
+  result.set(b, a.length);
+  return result;
+}
+
