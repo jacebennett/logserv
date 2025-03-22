@@ -1,3 +1,8 @@
+import { decodeBase64, encodeBase64 } from "jsr:@std/encoding/base64";
+import * as path from "jsr:@std/path";
+import { Application } from "jsr:@oak/oak/application";
+import { Router } from "jsr:@oak/oak/router";
+
 const CHUNK_SIZE = 400;
 const Utf8Decoder = new TextDecoder();
 
@@ -5,55 +10,143 @@ if (import.meta.main) {
   main();
 }
 
-// TODO: pagination requires that we surface the offset of the log entries so we can capture where to resume the search in a continuation token. That also implies that our search functions should allow us to supply an offset from which to start searching.
+function main() {
+  const router = new Router();
+  router.get("/:path(.*)", async (ctx) => {
+    const filename = ctx.params.path;
 
-async function main() {
-  const filename = "fodder/simple.log";
+    if (!filename) {
+      // TODO: make error handling consistent, use oak facilities to provide a backstop and consistent error format, throw (maybe typed) everywhere else
+      throw new Error("Not found");
+    }
 
-  const results = await searchLog(filename, {
-    maxResults: 6,
-    query: { text: "status" },
-  })
-  
-  console.log(JSON.stringify({ results }, null, 2));
+    const params = ctx.request.url.searchParams;
+
+    const numResults = params.get("n");
+    const searchString = params.get("s");
+    const continuationToken = params.get("cont");
+
+    // TODO: further request validation?
+
+    let searchOptions: SearchOptions = {};
+
+    if (continuationToken) {
+      if (searchString || numResults) {
+        throw new Error("Cannot specify a search in a continuation request.");
+      }
+      searchOptions = decodeContinuationToken(continuationToken);
+    }
+    
+    if (searchString) {
+      // TODO: validate the search string? cap its length?
+      searchOptions.query = { text: searchString }
+    }
+
+    if (numResults) {
+      searchOptions.maxResults = parseInt(numResults, 10);
+    }
+
+    // TODO: prevent traversal
+    const resolvedFilename = path.join(Deno.cwd(), filename);
+
+    const searchResults = await searchLog(resolvedFilename, searchOptions);
+
+    let nextContinuationToken: string | undefined;
+    if (searchResults.resumeFrom) {
+      nextContinuationToken = encodeContinuationToken(searchResults.resumeFrom, searchOptions.maxResults, searchOptions.query);
+    }
+
+    ctx.response.body = {
+      entries: searchResults.entries,
+      cont: nextContinuationToken,
+    };
+  });
+
+  const app = new Application();
+  const port = 1065;
+
+  app.use(router.routes());
+  app.use(router.allowedMethods());
+
+  console.log(`Logserv running on http://localhost:${port}/`);
+
+  app.listen({ port });
 }
 
-type Query = { text: string };
+function encodeContinuationToken(resumeFrom: number, maxResults?: number, query?: Query) {
+  const json = JSON.stringify([resumeFrom, maxResults, query]);
+  const encoded = encodeBase64(json);
+
+  return encoded;
+}
+
+function decodeContinuationToken(token: string) {
+  const jsonBytes = decodeBase64(token);
+  const json = Utf8Decoder.decode(jsonBytes);
+  const [resumeFrom, maxResults, query] = JSON.parse(json);
+
+  const result: SearchOptions = {
+    resumeFrom,
+    maxResults,
+    query
+  };
+
+  return result;
+}
+
+type KeywordSearch = { text: string };
+type Query = KeywordSearch;
 
 type SearchOptions = {
-  maxResults: number,
+  maxResults?: number,
   query?: Query,
+  resumeFrom?: number,
 };
 
-// TODO: make all options optional, come up with a default options object, and merge it with provided options in the function.
+const defaultSearchOptions = {
+  maxResults: 100,
+};
 
-export async function searchLog(filename: string, options: SearchOptions = { maxResults: 100 }) {
-  const results = [];
+export async function searchLog(filename: string, options: SearchOptions = {}) {
+  const opts = { ...defaultSearchOptions, ...options };
+  const searchText = opts.query?.text;
+  const maxResults = opts.maxResults;
+  const startingOffset = opts.resumeFrom;
 
-  const searchText = options.query?.text;
-  const maxResults = options.maxResults;
+  let earliestOffset: number | undefined;
 
-  for await (const lineChunk of linesReverse(filename)) {
+  const entries = [];
+
+  for await (const lineChunk of linesReverse(filename, startingOffset)) {
+    earliestOffset = lineChunk.offset;
     const line = Utf8Decoder.decode(lineChunk.bytes); // TODO: handle malformed data
-    if (!searchText || line.includes(searchText)) {
-      results.push(line);
+    
+    if (!line) {
+      continue;
+    }
 
-      if (results.length === maxResults) {
+    if (!searchText || line.includes(searchText)) {
+      entries.push(line);
+
+      if (entries.length === maxResults) {
         break;
       }
     }
   }
 
-  return results;
+  return {
+    entries,
+    resumeFrom: earliestOffset
+  };
 }
 
 /**
  * Opens the specified file and yields lines of text starting at the end of the file and working backwards.
  */
-export async function* linesReverse(filename: string) {
+export async function* linesReverse(filename: string, startingOffset?: number) {
   let partialLine: FileChunk | null = null;
 
-  for await (const chunk of chunksReverse(filename)) {
+  for await (const chunk of chunksReverse(filename, startingOffset)) {
     let lineEnding = chunk.bytes.length;
 
     while (true) {
@@ -95,18 +188,23 @@ export async function* linesReverse(filename: string) {
 /**
  * Opens the specified file and yields chunks of the specified size starting from the end of the file and working backwards.
  */
-export async function* chunksReverse(filename: string, chunkSize: number = CHUNK_SIZE) {
+export async function* chunksReverse(filename: string, startingOffset?: number) {
+  // TODO: how does this fail?
   using file = await Deno.open(filename, { read: true, write: false, create: false });
   const { size } = await file.stat();
 
-  let end = size;
-  let start = Math.max(0, end - chunkSize);
+  if (startingOffset && startingOffset > size) {
+    throw new Error("Invalid Offset");
+  }
+
+  let end = startingOffset ?? size;
+  let start = Math.max(0, end - CHUNK_SIZE);
 
   while (end > 0) {
     yield await readChunk(file, start, end - start);
 
     end = start;
-    start = Math.max(0, end - chunkSize);
+    start = Math.max(0, end - CHUNK_SIZE);
   }
 }
 
@@ -122,7 +220,7 @@ async function readChunk(file: Deno.FsFile, start: number, size: number) {
   while (bytesRead < size) {
     const read = await file.read(buffer.subarray(bytesRead));
     if (read === null) {
-      throw new Error('Unexpected End of file');
+      throw new Error("Unexpected End of File");
     }
 
     bytesRead += read;
