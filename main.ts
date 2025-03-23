@@ -23,9 +23,6 @@ if (import.meta.main) {
 
 export async function searchLogHandler(request: Request) {
   // TODO: unit and api tests
-  // TODO: build
-  // TODO: docker
-  // TODO: readme
   // TODO: primary
   // TODO: pick chunk size
   // TODO: perf
