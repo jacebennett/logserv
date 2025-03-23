@@ -1,15 +1,15 @@
 # LogServ
 
-LogServ is a lightweight service designed to serve log files from Unix-like systems. It provides a simple HTTP interface to access and view log files remotely.
+LogServ is a lightweight service designed to serve log files from Unix-like systems. It provides a simple rest interface to search the most recent log entries.
 
 ## Prerequisites
 
 ### Required
-- **Deno**: LogServ is built using Deno, because it didn't require additional dependencies, and I wanted to play with it. Install Deno for your platform here:  https://docs.deno.com/runtime/getting_started/installation/
+- **Deno**: LogServ is built using Deno, because it didn't require additional dependencies, and I wanted to play with it. Install Deno for your platform here: https://docs.deno.com/runtime/getting_started/installation/
 
 ### Optional Goodies
-- **docker**: we include a docker build in case images are the most convenient distributable
-- **vscode w/ devcontainer**: You should be able to open the project in a dev container in vscode or a codespace and be up and running.
+- **docker**: I include a docker build in case images are the most convenient distributable
+- **devcontainer**: You should be able to open the project in a dev container in vscode or a codespace and be up and running.
 
 ## Development
 

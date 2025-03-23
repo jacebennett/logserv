@@ -26,6 +26,7 @@ export async function searchLogHandler(request: Request) {
   // TODO: primary
   // TODO: pick chunk size
   // TODO: perf
+  // TODO: cache control
 
   if (request.method !== "GET") {
     return notFound();
