@@ -1,14 +1,21 @@
 import { decodeBase64, encodeBase64 } from "jsr:@std/encoding/base64";
 import * as path from "jsr:@std/path";
 
-const CHUNK_SIZE = 400;
+const CHUNK_SIZE = 64 * 1024;
+const MAX_PATH_LENGTH = 1000;
+const MAX_SEARCH_TEXT_LENGTH = 200;
+const MAX_CONTINUATION_TOKEN_LENGTH = 200;
+const GLOBAL_MAX_RESULTS = 100;
+const MAX_RESULT_ENTRY_LENGTH = 2048;
 const Utf8Decoder = new TextDecoder();
 
 if (import.meta.main) {
-  const port = 1065;
-  // TODO: make error handling consistent, use oak facilities to provide a backstop and consistent error format, throw (maybe typed) everywhere else
+  startLogServ();
+}
+
+function startLogServ() {
   Deno.serve({
-      port,
+      port: 1065,
       onError(error) {
         if (error instanceof Deno.errors.NotFound) {
           return notFound();
@@ -21,13 +28,9 @@ if (import.meta.main) {
   );
 }
 
+// #region Http Handler
 export async function searchLogHandler(request: Request) {
-  // TODO: unit and api tests
-  // TODO: primary
-  // TODO: pick chunk size
-  // TODO: perf
-  // TODO: cache control
-
+  // TODO: aggregator
   if (request.method !== "GET") {
     return notFound();
   }
@@ -39,34 +42,56 @@ export async function searchLogHandler(request: Request) {
     return notFound();
   }
 
+  if (filename.length > MAX_PATH_LENGTH) {
+    return badRequest("Path too long.")
+  }
+
   const params = url.searchParams;
 
   const numResults = params.get("n");
   const searchString = params.get("s");
   const continuationToken = params.get("cont");
 
-  // TODO: further request validation?
-
   let searchOptions: SearchOptions = {};
 
   if (continuationToken) {
+    if (continuationToken.length > MAX_CONTINUATION_TOKEN_LENGTH) {
+      return badRequest("Continuation token too long.")
+    }
     if (searchString || numResults) {
       return badRequest("Cannot specify a search in a continuation request.");
     }
-    searchOptions = decodeContinuationToken(continuationToken);
+    try {
+      searchOptions = decodeContinuationToken(continuationToken);
+    } catch (_e) {
+      return badRequest("Invalid continuation token.")
+    }
   }
 
   if (searchString) {
-    // TODO: validate the search string? cap its length?
+    if (searchString.length > MAX_SEARCH_TEXT_LENGTH) {
+      return badRequest("Search text too long.")
+    }
     searchOptions.query = { text: searchString };
   }
 
   if (numResults) {
-    searchOptions.maxResults = parseInt(numResults, 10);
+    const suppliedMaxResults = parseInt(numResults, 10);
+    if (isNaN(suppliedMaxResults) || suppliedMaxResults < 1) {
+      return badRequest("'n' must be a positive integer.");
+    }
+    searchOptions.maxResults = Math.min(suppliedMaxResults, GLOBAL_MAX_RESULTS);
   }
 
-  // TODO: prevent traversal
+  if (!searchOptions.maxResults) {
+    searchOptions.maxResults = GLOBAL_MAX_RESULTS;
+  }
+
   const resolvedFilename = path.join(Deno.cwd(), filename);
+  if (!resolvedFilename.startsWith(Deno.cwd())) {
+    console.error(`Directory traversal attempted: ${url}`);
+    return notFound();
+  }
 
   const searchResults = await searchLog(resolvedFilename, searchOptions);
 
@@ -84,7 +109,11 @@ export async function searchLogHandler(request: Request) {
     cont: nextContinuationToken,
   };
 
-  return new Response(JSON.stringify(body, null, 2) + "\n");
+  return new Response(JSON.stringify(body, null, 2) + "\n", {
+    headers: {
+      "Cache-Control": "no-cache",
+    }
+  });
 }
 
 function notFound(msg: string = "Not Found") {
@@ -120,18 +149,26 @@ function encodeContinuationToken(
 }
 
 function decodeContinuationToken(token: string) {
-  const jsonBytes = decodeBase64(token);
-  const json = Utf8Decoder.decode(jsonBytes);
-  const [resumeFrom, maxResults, query] = JSON.parse(json);
+  try {
+    const jsonBytes = decodeBase64(token);
+    const json = Utf8Decoder.decode(jsonBytes);
+    const [resumeFrom, maxResults, query] = JSON.parse(json);
 
-  const result: SearchOptions = {
-    resumeFrom,
-    maxResults,
-    query,
-  };
+    const result: SearchOptions = {
+      resumeFrom,
+      maxResults,
+      query,
+    };
 
-  return result;
+    return result;
+  } catch (_e) {
+    throw new Error
+  }
 }
+
+// #endregion
+
+// #region Log Reading
 
 type KeywordSearch = { text: string };
 type Query = KeywordSearch;
@@ -194,29 +231,39 @@ export async function* linesReverse(filename: string, startingOffset?: number) {
       if (prevLineEnding === -1) {
         // we've reached the beginning of the chunk, so we need to save off the partial line since it may be continued in the next chunk.
         if (partialLine === null) {
-          partialLine = subChunk(chunk, 0, lineEnding);
-        } else {
-          partialLine = concatChunks(
-            subChunk(chunk, 0, lineEnding),
-            partialLine,
-          ); // TODO: handle very large entries.
+          partialLine = chunk.subChunk(0, lineEnding);
+          break;
         }
 
-        // move on to the next chunk
+        // we reached the beginning of the chunk while there was still a partial, it must span more than a chunk. we need to keep scanning the line to find the beginning, but we don't want to accumulate arbitrary amounts of memory, so each time we will only keep the first portion.
+
+        if (lineEnding > MAX_RESULT_ENTRY_LENGTH) {
+          partialLine = chunk.subChunk(0, MAX_RESULT_ENTRY_LENGTH);
+          break;
+        }
+
+        partialLine.prepend(chunk.subChunk(0, lineEnding));
+
+        if (partialLine.bytes.length > MAX_RESULT_ENTRY_LENGTH) {
+          partialLine = partialLine.subChunk(0, MAX_RESULT_ENTRY_LENGTH);
+        }
+        
         break;
       }
 
       const lineStart = prevLineEnding + 1;
-      const line = subChunk(chunk, lineStart, lineEnding);
+      let line = chunk.subChunk(lineStart, lineEnding);
 
       if (partialLine !== null) {
-        const result = concatChunks(line, partialLine);
+        line = line.concat(partialLine);
         partialLine = null;
-        yield result;
-      } else {
-        yield line;
       }
 
+      if (line.bytes.length > MAX_RESULT_ENTRY_LENGTH) {
+        line = line.subChunk(0, MAX_RESULT_ENTRY_LENGTH);
+      }
+
+      yield line;
       lineEnding = prevLineEnding;
     }
   }
@@ -234,7 +281,6 @@ export async function* chunksReverse(
   filename: string,
   startingOffset?: number,
 ) {
-  // TODO: how does this fail?
   using file = await Deno.open(filename, {
     read: true,
     write: false,
@@ -275,33 +321,38 @@ async function readChunk(file: Deno.FsFile, start: number, size: number) {
     bytesRead += read;
   }
 
-  return Chunk(start, buffer);
+  return new FileChunk(start, buffer);
 }
 
-type FileChunk = {
+class FileChunk {
   offset: number;
   bytes: Uint8Array;
-};
 
-function Chunk(offset: number, bytes: Uint8Array) {
-  const result: FileChunk = { offset, bytes };
-  return result;
-}
+  constructor(offset: number, bytes: Uint8Array) {
+    this.offset = offset;
+    this.bytes = bytes;
+  }
 
-function subChunk(chunk: FileChunk, start: number, end: number) {
-  // TODO: maybe bounds checks
-  return Chunk(chunk.offset + start, chunk.bytes.subarray(start, end));
-}
+  subChunk(start: number, end: number) {
+    // TODO: maybe bounds checks
+    return new FileChunk(this.offset + start, this.bytes.subarray(start, end));
+  }
 
-function concatChunks(a: FileChunk, b: FileChunk) {
-  // TODO: maybe check adjacency
+  concat(successor: FileChunk) {
+    // TODO: maybe check adjacency
+    return new FileChunk(
+      this.offset,
+      concatByteArrays(this.bytes, successor.bytes),
+    );
+  }
 
-  const result: FileChunk = {
-    offset: a.offset,
-    bytes: concatByteArrays(a.bytes, b.bytes),
-  };
-
-  return result;
+  prepend(predecessor: FileChunk) {
+    // TODO: maybe check adjacency
+    return new FileChunk(
+      predecessor.offset,
+      concatByteArrays(predecessor.bytes, this.bytes),
+    );
+  }
 }
 
 function concatByteArrays(a: Uint8Array, b: Uint8Array): Uint8Array {
@@ -310,3 +361,5 @@ function concatByteArrays(a: Uint8Array, b: Uint8Array): Uint8Array {
   result.set(b, a.length);
   return result;
 }
+
+// #endregion
