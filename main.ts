@@ -10,10 +10,12 @@ const MAX_RESULT_ENTRY_LENGTH = 2048;
 const Utf8Decoder = new TextDecoder();
 
 if (import.meta.main) {
+  // TODO: aggregator
   startLogServ();
 }
 
 function startLogServ() {
+  // TODO: simple driver UI
   Deno.serve({
       port: 1065,
       onError(error) {
@@ -28,9 +30,8 @@ function startLogServ() {
   );
 }
 
-// #region Http Handler
+// #region Http Handling
 export async function searchLogHandler(request: Request) {
-  // TODO: aggregator
   if (request.method !== "GET") {
     return notFound();
   }
@@ -169,7 +170,6 @@ function decodeContinuationToken(token: string) {
 // #endregion
 
 // #region Log Reading
-
 type KeywordSearch = { text: string };
 type Query = KeywordSearch;
 
@@ -201,7 +201,16 @@ export async function searchLog(filename: string, options: SearchOptions = {}) {
       continue;
     }
 
+    // NOTE: The prompt talked about extending the matching capabilities. I think regex would slot in here nicely with a `pattern` querystring parameter, a
+    // PatternSearch type added to the Query type union, and a little rework to this logic to match the line text based on the selected strategy. It will also
+    // serialize nicely into the continuation tokens.I think for more advanced queries and query encodings I would like to understand the needs better. It
+    // could go a lot of ways, and I'm not sure this endpoint would be relevant in some of those futures. So, I'm not ready to make an abstraction beyond
+    // supporting the immediate requirements, but I would be happy to discuss them.
+    // 
+    // But for now, this is simple code, and so it can be easily enhanced.
     if (!searchText || line.includes(searchText)) {
+      // NOTE: A lot of leverage could be had if we could extract some structured data out of a log entry. This would take some time and testing and sample
+      // data, but if I had bandwidth, I would try to extract things like the time (at least), and if I could identify the message portion, etc, etc.
       entries.push(line);
 
       if (entries.length === maxResults) {
