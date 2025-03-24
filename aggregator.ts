@@ -42,7 +42,7 @@ export class Aggregator {
 
     if ("cont" in searchParams) {
       const secondaryContinuationTokens = demuxContinuationTokens(
-        searchParams.cont,
+        searchParams.cont
       );
 
       for (const token of secondaryContinuationTokens) {
@@ -50,7 +50,7 @@ export class Aggregator {
         secondaryUrl.host = token.host;
         secondaryUrl.searchParams.set("cont", token.cont);
         requests.push(
-          querySecondary(secondaryUrl, token.host, abortController.signal),
+          querySecondary(secondaryUrl, token.host, abortController.signal)
         );
       }
     } else {
@@ -67,7 +67,7 @@ export class Aggregator {
         const secondaryUrl = new URL(url);
         secondaryUrl.host = host;
         requests.push(
-          querySecondary(secondaryUrl, host, abortController.signal),
+          querySecondary(secondaryUrl, host, abortController.signal)
         );
       }
     }
@@ -148,7 +148,20 @@ function demuxContinuationTokens(token: string) {
 async function querySecondary(url: URL, host: string, signal: AbortSignal) {
   try {
     const response = await fetch(url, { signal });
-    // TODO: test this. handle errors(?) do 400s throw?
+
+    console.log(
+      `Response from host ${host}: ${response.status} ${response.statusText}`
+    );
+
+    if (response.status !== 200) {
+      const errBody: { error: string } = await response.json();
+      const error: SecondaryQueryError = {
+        host,
+        error: errBody.error,
+      };
+      return error;
+    }
+
     const body: { entries: string[]; cont?: string } = await response.json();
 
     const result: SecondaryResult = {

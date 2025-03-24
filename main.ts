@@ -107,5 +107,5 @@ function startAggregator(hosts: string[]) {
       console.error("Unexpected Error:", error);
       return unexpected();
     },
-  }, aggregator.handler);
+  }, aggregator.handler.bind(aggregator));
 }
