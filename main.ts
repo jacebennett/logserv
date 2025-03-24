@@ -123,7 +123,11 @@ export async function searchLogHandler(request: Request) {
 
   const { filename, ...searchParams } = validateSearchParams(url);
   if ("cont" in searchParams) {
-    searchOptions = decodeContinuationToken(searchParams.cont);
+    try {
+      searchOptions = decodeContinuationToken(searchParams.cont);
+    } catch (_err: unknown) {
+      throw badRequest("Invalid token.");
+    }
   } else {
     if (searchParams.n) {
       searchOptions.maxResults = searchParams.n;
