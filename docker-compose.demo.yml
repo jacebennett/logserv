@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # Normal LogServ instances
+  logserv-hosta:
+    build:
+      context: .
+    volumes:
+      - ./fodder/hosta:/logs
+    networks:
+      - logserv-network
+
+  logserv-hostb:
+    build:
+      context: .
+    volumes:
+      - ./fodder/hostb:/logs
+    networks:
+      - logserv-network
+
+  logserv-hostc:
+    build:
+      context: .
+    volumes:
+      - ./fodder/hostc:/logs
+    networks:
+      - logserv-network
+
+  # Aggregator LogServ instance
+  logserv-aggregator:
+    build:
+      context: .
+    environment:
+      - HOSTS=logserv-hosta;logserv-hostb;logserv-hostc
+    ports:
+      - "1065:1065"
+    depends_on:
+      - logserv-hosta
+      - logserv-hostb
+      - logserv-hostc
+    networks:
+      - logserv-network
+
+networks:
+  logserv-network:
+    driver: bridge
