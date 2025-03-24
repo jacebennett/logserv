@@ -1,6 +1,6 @@
-import { searchLogHandler } from "./normal.ts";
-import { Aggregator } from "./aggregator.ts";
-import { errorToResponse, notFound, unexpected } from "./util.ts";
+import { searchLogHandler } from "./src/normal.ts";
+import { Aggregator } from "./src/aggregator.ts";
+import { errorToResponse } from "./src/util.ts";
 
 // TODO: when attaching continuation tokens to the request, go ahead and attach a fully formed url.
 // TODO: consider making normal and aggregator responses compatible
