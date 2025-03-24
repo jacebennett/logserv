@@ -20,6 +20,8 @@ type SecondaryQueryError = {
   error: string;
 };
 
+const GLOBAL_TIMEOUT = 5000;
+
 export class Aggregator {
   hosts: string[];
 
@@ -36,7 +38,10 @@ export class Aggregator {
     const searchParams = validateSearchParams(url);
 
     const abortController = new AbortController();
-    setTimeout(() => abortController.abort("deadline exceeded"), 5000);
+    setTimeout(
+      () => abortController.abort("deadline exceeded"),
+      GLOBAL_TIMEOUT
+    );
 
     const requests = [];
 
