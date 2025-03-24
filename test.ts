@@ -1,5 +1,5 @@
 import { expect } from "jsr:@std/expect";
-import { searchLogHandler } from "./main.ts";
+import { searchLogHandler } from "./normal.ts";
 
 const baseUrl = "http://localhost:1065";
 
