@@ -159,7 +159,7 @@ The binary should be run in the directory containing the log files you want to
 serve:
 
 ```
-cd /var/log && /path/to/logserv/logserv
+cd /var/log && /path/to/logserv
 ```
 
 The server will start on port 1065, serving log files from the working
@@ -189,6 +189,28 @@ This will:
 - Mount your local log directory to the `/logs` directory in the container
 
 You can then access your logs at `http://localhost:1065/`.
+
+## Demo
+
+LogServ includes a demonstration script that shows how the service works with pagination and search functionality.
+
+### Prerequisites
+
+- **Docker Compose**: The demo uses Docker Compose to create a test environment
+- **Deno**: Required to run the demo script
+
+### Running the Demo
+
+Run the demonstration with:
+
+```
+deno task demo
+```
+
+This will:
+1. Start a Docker Compose environment using `docker-compose.demo.yml`
+2. Make a series of requests to the LogServ service
+3. Demonstrate search functionality using the term "
 
 ## License
 
