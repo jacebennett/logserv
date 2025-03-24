@@ -212,6 +212,19 @@ This will:
 2. Make a series of requests to the LogServ service
 3. Demonstrate search functionality using the term "
 
+## Next Steps
+
+These are the things I would work on if I were building this out:
+
+- **(Showstopper)** Normal mode operation should return entries as objects instead of strings. Aggregator should be adapted to attach additional properties to the existing entry object. This will allow us to enhance our log processing to add additional structured data without api breakage.
+- https, signature-based authentication, authorization if needed
+- Review for any missing error handling
+- Load test and profile, instrument
+- Play around to see if moving to the Buffer API would allow us to follow through on the no-copy dream
+- Consider circuit breakers on secondaries
+- Add a request router (or an actual web framework) and a simple demo page. Static HTML. VanillaJS or HTMX for this usage.
+- Heuristic log parsing, surface what structured data you can extract
+
 ## License
 
 Copyright (c) 2025 Jace Bennett
