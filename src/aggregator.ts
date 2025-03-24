@@ -2,6 +2,7 @@ import { decodeBase64, encodeBase64 } from "jsr:@std/encoding/base64";
 
 import type { SearchOptions } from "./scanner.ts";
 import {
+  badRequest,
   jsonResponse,
   notFound,
   Utf8Decoder,
@@ -30,7 +31,6 @@ export class Aggregator {
   }
 
   async handler(request: Request) {
-    // TODO: simple driver UI
     if (request.method !== "GET") {
       return notFound();
     }
@@ -39,16 +39,22 @@ export class Aggregator {
 
     const abortController = new AbortController();
     setTimeout(
-      () => abortController.abort("deadline exceeded"),
+      () => abortController.abort("Deadline exceeded."),
       GLOBAL_TIMEOUT
     );
 
     const requests = [];
 
     if ("cont" in searchParams) {
-      const secondaryContinuationTokens = demuxContinuationTokens(
-        searchParams.cont
-      );
+      // We are continuing a query. Read the secondary continuation tokens and create a secondary request for each.
+      let secondaryContinuationTokens: SecondaryToken[] = [];
+      try {
+        secondaryContinuationTokens = demuxContinuationTokens(
+          searchParams.cont
+        );
+      } catch {
+        return badRequest("Invalid token.");
+      }
 
       for (const token of secondaryContinuationTokens) {
         const secondaryUrl = new URL(url);
@@ -59,6 +65,7 @@ export class Aggregator {
         );
       }
     } else {
+      // We are starting a new search. Validate the params and create a request for each secondary host.
       const searchOptions: SearchOptions = {};
       if (searchParams.n) {
         searchOptions.maxResults = searchParams.n;
@@ -118,36 +125,32 @@ function muxContinuationTokens(secondaryTokens: SecondaryToken[]) {
 }
 
 function demuxContinuationTokens(token: string) {
-  try {
-    const jsonBytes = decodeBase64(token);
-    const json = Utf8Decoder.decode(jsonBytes);
-    const secondaryTokens = JSON.parse(json);
+  const jsonBytes = decodeBase64(token);
+  const json = Utf8Decoder.decode(jsonBytes);
+  const secondaryTokens = JSON.parse(json);
 
-    if (!Array.isArray(secondaryTokens)) {
-      throw "must be array";
-    }
-
-    for (const secondaryToken of secondaryTokens) {
-      if (!secondaryToken) {
-        throw "can't be null";
-      }
-      if (typeof secondaryToken != "object") {
-        throw "must be object";
-      }
-
-      if (typeof secondaryToken.host != "string") {
-        throw "must have host";
-      }
-
-      if (typeof secondaryToken.cont != "string") {
-        throw "must have cont";
-      }
-    }
-
-    return secondaryTokens as SecondaryToken[];
-  } catch (_e) {
-    throw new Error("Invalid Token.");
+  if (!Array.isArray(secondaryTokens)) {
+    throw "must be array";
   }
+
+  for (const secondaryToken of secondaryTokens) {
+    if (!secondaryToken) {
+      throw "can't be null";
+    }
+    if (typeof secondaryToken != "object") {
+      throw "must be object";
+    }
+
+    if (typeof secondaryToken.host != "string") {
+      throw "must have host";
+    }
+
+    if (typeof secondaryToken.cont != "string") {
+      throw "must have cont";
+    }
+  }
+
+  return secondaryTokens as SecondaryToken[];
 }
 
 async function querySecondary(url: URL, host: string, signal: AbortSignal) {
@@ -178,7 +181,7 @@ async function querySecondary(url: URL, host: string, signal: AbortSignal) {
     return result;
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
-      console.warn(`secondary request timed out: ${url}`);
+      console.warn(`Secondary request timed out: ${url}`);
       const error: SecondaryQueryError = {
         host,
         error: err.message,
@@ -186,7 +189,7 @@ async function querySecondary(url: URL, host: string, signal: AbortSignal) {
       return error;
     }
 
-    console.error("secondary request resulted in unhandled error", err);
+    console.error("Secondary request resulted in unhandled error", err);
     const error: SecondaryQueryError = {
       host,
       error: "Unknown error occured.",

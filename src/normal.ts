@@ -12,7 +12,6 @@ import {
 } from "./util.ts";
 
 export async function searchLogHandler(request: Request) {
-  // TODO: simple driver UI
   if (request.method !== "GET") {
     return notFound();
   }
