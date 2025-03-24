@@ -74,19 +74,22 @@ EXAMPLES:
 }
 
 function startNormal() {
-  Deno.serve({
-    port: 1065,
-    onError(error) {
-      if (error instanceof Response) {
-        return error;
-      }
-      if (error instanceof Deno.errors.NotFound) {
-        return notFound();
-      }
-      console.error("Unexpected Error:", error);
-      return unexpected();
+  Deno.serve(
+    {
+      port: 1065,
+      onError(error) {
+        if (error instanceof Response) {
+          return error;
+        }
+        if (error instanceof Deno.errors.NotFound) {
+          return notFound();
+        }
+        console.error("Unexpected Error:", error);
+        return unexpected();
+      },
     },
-  }, searchLogHandler);
+    searchLogHandler
+  );
 }
 
 function startAggregator(hosts: string[]) {
@@ -98,14 +101,17 @@ function startAggregator(hosts: string[]) {
 
   const aggregator = new Aggregator(hosts);
 
-  Deno.serve({
-    port: 1065,
-    onError(error) {
-      if (error instanceof Response) {
-        return error;
-      }
-      console.error("Unexpected Error:", error);
-      return unexpected();
+  Deno.serve(
+    {
+      port: 1065,
+      onError(error) {
+        if (error instanceof Response) {
+          return error;
+        }
+        console.error("Unexpected Error:", error);
+        return unexpected();
+      },
     },
-  }, aggregator.handler.bind(aggregator));
+    (req) => aggregator.handler(req) // TODO: why isn't this bound?
+  );
 }

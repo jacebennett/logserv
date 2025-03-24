@@ -13,17 +13,17 @@ Deno.test("simple read", async () => {
   const response = await searchLogHandler(request);
 
   expect(response.status).toEqual(200);
-  const { entries } = await response.json() as ResponseBody;
+  const { entries } = (await response.json()) as ResponseBody;
 
   // all entries returned
   expect(entries).toHaveLength(10);
 
   // returned in reverse order
   expect(entries[0]).toEqual(
-    "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10",
+    "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10"
   );
   expect(entries[9]).toEqual(
-    "2025-03-17 14:17:20 configure gettext:amd64 0.21-12 <none>",
+    "2025-03-17 14:17:20 configure gettext:amd64 0.21-12 <none>"
   );
 });
 
@@ -32,17 +32,17 @@ Deno.test("filtering", async () => {
   const response = await searchLogHandler(request);
 
   expect(response.status).toEqual(200);
-  const { entries } = await response.json() as ResponseBody;
+  const { entries } = (await response.json()) as ResponseBody;
 
   // all matching enties returned
   expect(entries).toHaveLength(7);
 
   // returned in reverse order
   expect(entries[0]).toEqual(
-    "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10",
+    "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10"
   );
   expect(entries[6]).toEqual(
-    "2025-03-17 14:17:21 status unpacked gettext:amd64 0.21-12",
+    "2025-03-17 14:17:21 status unpacked gettext:amd64 0.21-12"
   );
 });
 
@@ -51,17 +51,17 @@ Deno.test("limiting", async () => {
   const response = await searchLogHandler(request);
 
   expect(response.status).toEqual(200);
-  const { entries } = await response.json() as ResponseBody;
+  const { entries } = (await response.json()) as ResponseBody;
 
   // all entries returned up to limit
   expect(entries).toHaveLength(3);
 
   // returned in reverse order
   expect(entries[0]).toEqual(
-    "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10",
+    "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10"
   );
   expect(entries[2]).toEqual(
-    "2025-03-17 14:17:27 trigproc libc-bin:amd64 2.36-9+deb12u10 <none>",
+    "2025-03-17 14:17:27 trigproc libc-bin:amd64 2.36-9+deb12u10 <none>"
   );
 });
 
@@ -70,58 +70,58 @@ Deno.test("filter, limit, and paginate", async () => {
   const page1Response = await searchLogHandler(page1Request);
 
   expect(page1Response.status).toEqual(200);
-  const page1 = await page1Response.json() as ResponseBody;
+  const page1 = (await page1Response.json()) as ResponseBody;
 
   // matching entries returned up to limit
   expect(page1.entries).toHaveLength(3);
 
   // returned in reverse order
   expect(page1.entries[0]).toEqual(
-    "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10",
+    "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10"
   );
   expect(page1.entries[2]).toEqual(
-    "2025-03-17 14:17:26 status installed man-db:amd64 2.11.2-2",
+    "2025-03-17 14:17:26 status installed man-db:amd64 2.11.2-2"
   );
 
   // result indicates there is more
   expect(page1.cont).toBeDefined();
 
   const page2Request = new Request(
-    `${baseUrl}/fodder/simple.log?cont=${page1.cont}`,
+    `${baseUrl}/fodder/simple.log?cont=${page1.cont}`
   );
   const page2Response = await searchLogHandler(page2Request);
 
   expect(page2Response.status).toEqual(200);
-  const page2 = await page2Response.json() as ResponseBody;
+  const page2 = (await page2Response.json()) as ResponseBody;
 
   // matching entries returned up to limit
   expect(page2.entries).toHaveLength(3);
 
   // returned in reverse order
   expect(page2.entries[0]).toEqual(
-    "2025-03-17 14:17:25 status half-configured man-db:amd64 2.11.2-2",
+    "2025-03-17 14:17:25 status half-configured man-db:amd64 2.11.2-2"
   );
   expect(page2.entries[2]).toEqual(
-    "2025-03-17 14:17:22 status half-configured gettext:amd64 0.21-12",
+    "2025-03-17 14:17:22 status half-configured gettext:amd64 0.21-12"
   );
 
   // still more
   expect(page2.cont).toBeDefined();
 
   const page3Request = new Request(
-    `${baseUrl}/fodder/simple.log?cont=${page2.cont}`,
+    `${baseUrl}/fodder/simple.log?cont=${page2.cont}`
   );
   const page3Response = await searchLogHandler(page3Request);
 
   expect(page3Response.status).toEqual(200);
-  const page3 = await page3Response.json() as ResponseBody;
+  const page3 = (await page3Response.json()) as ResponseBody;
 
   // matching entries returned up to limit
   expect(page3.entries).toHaveLength(1);
 
   // returned in reverse order
   expect(page3.entries[0]).toEqual(
-    "2025-03-17 14:17:21 status unpacked gettext:amd64 0.21-12",
+    "2025-03-17 14:17:21 status unpacked gettext:amd64 0.21-12"
   );
 
   // pagination complete
@@ -145,7 +145,7 @@ Deno.test("error: malformed n", async () => {
     return;
   }
 
-  throw ("The request succeeded inappropriately");
+  throw "The request succeeded inappropriately";
 });
 
 Deno.test("error: n too low", async () => {
@@ -165,7 +165,7 @@ Deno.test("error: n too low", async () => {
     return;
   }
 
-  throw ("The request succeeded inappropriately");
+  throw "The request succeeded inappropriately";
 });
 
 Deno.test("global max results", async () => {
@@ -173,7 +173,7 @@ Deno.test("global max results", async () => {
   const response = await searchLogHandler(request);
 
   expect(response.status).toEqual(200);
-  const { entries } = await response.json() as ResponseBody;
+  const { entries } = (await response.json()) as ResponseBody;
 
   // all entries returned up to limit
   expect(entries).toHaveLength(100);
@@ -196,7 +196,7 @@ Deno.test("continuation/search conflict", async () => {
     return;
   }
 
-  throw ("The request succeeded inappropriately");
+  throw "The request succeeded inappropriately";
 });
 
 Deno.test("continuation/n conflict", async () => {
@@ -216,7 +216,7 @@ Deno.test("continuation/n conflict", async () => {
     return;
   }
 
-  throw ("The request succeeded inappropriately");
+  throw "The request succeeded inappropriately";
 });
 
 Deno.test("malformed continuation token", async () => {
@@ -236,7 +236,7 @@ Deno.test("malformed continuation token", async () => {
     return;
   }
 
-  throw ("The request succeeded inappropriately");
+  throw "The request succeeded inappropriately";
 });
 
 Deno.test("not found", async () => {

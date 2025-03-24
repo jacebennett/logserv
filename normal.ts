@@ -53,7 +53,7 @@ export async function searchLogHandler(request: Request) {
       cont: encodeContinuationToken(
         searchResults.resumeFrom,
         searchOptions.maxResults,
-        searchOptions.query,
+        searchOptions.query
       ),
     }),
   };
@@ -64,7 +64,7 @@ export async function searchLogHandler(request: Request) {
 function encodeContinuationToken(
   resumeFrom: number,
   maxResults?: number,
-  query?: Query,
+  query?: Query
 ) {
   const json = JSON.stringify([resumeFrom, maxResults, query]);
   const encoded = encodeBase64(json);
