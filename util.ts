@@ -1,9 +1,9 @@
 import type { SearchOptions } from "./scanner.ts";
 
-const MAX_PATH_LENGTH = 1000;
-const MAX_SEARCH_TEXT_LENGTH = 200;
-const MAX_CONTINUATION_TOKEN_LENGTH = 200;
-const GLOBAL_MAX_RESULTS = 100;
+export const MAX_PATH_LENGTH = 1000;
+export const MAX_SEARCH_TEXT_LENGTH = 200;
+export const MAX_CONTINUATION_TOKEN_LENGTH = 200;
+export const GLOBAL_MAX_RESULTS = 100;
 
 export const Utf8Decoder = new TextDecoder();
 
@@ -99,4 +99,15 @@ export function unexpected(msg: string = "Internal Server Error") {
     status: 500,
     statusText: "Internal Server Error",
   });
+}
+
+export function errorToResponse(err: unknown) {
+  if (err instanceof Response) {
+    return err;
+  }
+  if (err instanceof Deno.errors.NotFound) {
+    return notFound();
+  }
+  console.error("Unexpected Error:", err);
+  return unexpected();
 }

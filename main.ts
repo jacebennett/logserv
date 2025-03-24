@@ -1,8 +1,9 @@
 import { searchLogHandler } from "./normal.ts";
 import { Aggregator } from "./aggregator.ts";
-import { notFound, unexpected } from "./util.ts";
+import { errorToResponse, notFound, unexpected } from "./util.ts";
 
 // TODO: when attaching continuation tokens to the request, go ahead and attach a fully formed url.
+// TODO: consider making normal and aggregator responses compatible
 
 if (import.meta.main) {
   main();
@@ -77,16 +78,7 @@ function startNormal() {
   Deno.serve(
     {
       port: 1065,
-      onError(error) {
-        if (error instanceof Response) {
-          return error;
-        }
-        if (error instanceof Deno.errors.NotFound) {
-          return notFound();
-        }
-        console.error("Unexpected Error:", error);
-        return unexpected();
-      },
+      onError: errorToResponse,
     },
     searchLogHandler
   );
@@ -104,13 +96,7 @@ function startAggregator(hosts: string[]) {
   Deno.serve(
     {
       port: 1065,
-      onError(error) {
-        if (error instanceof Response) {
-          return error;
-        }
-        console.error("Unexpected Error:", error);
-        return unexpected();
-      },
+      onError: errorToResponse,
     },
     (req) => aggregator.handler(req) // TODO: why isn't this bound?
   );
