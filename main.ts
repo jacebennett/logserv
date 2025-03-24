@@ -5,13 +5,17 @@ import { notFound, unexpected } from "./util.ts";
 // TODO: when attaching continuation tokens to the request, go ahead and attach a fully formed url.
 
 if (import.meta.main) {
+  main();
+}
+
+function main() {
   if (Deno.args.includes("--help") || Deno.args.includes("-h")) {
     printUsage();
     Deno.exit(0);
   }
 
-  const hostsArgIndex = Deno.args.indexOf("--hosts");
-  if (hostsArgIndex >= 0) {
+  if (Deno.args.includes("--hosts")) {
+    const hostsArgIndex = Deno.args.indexOf("--hosts");
     const hostListIndex = hostsArgIndex + 1;
     if (Deno.args.length >= hostListIndex) {
       console.error("Missing hosts list.");
@@ -20,12 +24,16 @@ if (import.meta.main) {
     }
     const hostsList = Deno.args[hostListIndex];
     startAggregator(hostsList.split(";"));
-  } else if (Deno.env.has("HOSTS")) {
+    return;
+  }
+
+  if (Deno.env.has("HOSTS")) {
     const hostsList = Deno.env.get("HOSTS")!;
     startAggregator(hostsList.split(";"));
-  } else {
-    startNormal();
+    return;
   }
+
+  startNormal();
 }
 
 function printUsage() {
