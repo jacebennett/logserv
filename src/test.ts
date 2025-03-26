@@ -1,26 +1,21 @@
 import { expect } from "jsr:@std/expect";
-import { searchLogHandler } from "./normal.ts";
+import { searchLogHandler, type SearchResponse } from "./normal.ts";
 import { errorToResponse } from "./util.ts";
-
-type ResponseBody = {
-  entries: string[];
-  cont?: string;
-};
 
 Deno.test("simple read", async () => {
   const response = await makeRequest("/fodder/simple.log");
 
   expect(response.status).toEqual(200);
-  const { entries } = (await response.json()) as ResponseBody;
+  const { entries } = (await response.json()) as SearchResponse;
 
   // all entries returned
   expect(entries).toHaveLength(10);
 
   // returned in reverse order
-  expect(entries[0]).toEqual(
+  expect(entries[0].entry).toEqual(
     "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10"
   );
-  expect(entries[9]).toEqual(
+  expect(entries[9].entry).toEqual(
     "2025-03-17 14:17:20 configure gettext:amd64 0.21-12 <none>"
   );
 });
@@ -29,16 +24,16 @@ Deno.test("filtering", async () => {
   const response = await makeRequest("/fodder/simple.log?s=status");
 
   expect(response.status).toEqual(200);
-  const { entries } = (await response.json()) as ResponseBody;
+  const { entries } = (await response.json()) as SearchResponse;
 
   // all matching enties returned
   expect(entries).toHaveLength(7);
 
   // returned in reverse order
-  expect(entries[0]).toEqual(
+  expect(entries[0].entry).toEqual(
     "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10"
   );
-  expect(entries[6]).toEqual(
+  expect(entries[6].entry).toEqual(
     "2025-03-17 14:17:21 status unpacked gettext:amd64 0.21-12"
   );
 });
@@ -47,16 +42,16 @@ Deno.test("limiting", async () => {
   const response = await makeRequest("/fodder/simple.log?n=3");
 
   expect(response.status).toEqual(200);
-  const { entries } = (await response.json()) as ResponseBody;
+  const { entries } = (await response.json()) as SearchResponse;
 
   // all entries returned up to limit
   expect(entries).toHaveLength(3);
 
   // returned in reverse order
-  expect(entries[0]).toEqual(
+  expect(entries[0].entry).toEqual(
     "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10"
   );
-  expect(entries[2]).toEqual(
+  expect(entries[2].entry).toEqual(
     "2025-03-17 14:17:27 trigproc libc-bin:amd64 2.36-9+deb12u10 <none>"
   );
 });
@@ -65,16 +60,16 @@ Deno.test("filter, limit, and paginate", async () => {
   const page1Response = await makeRequest("/fodder/simple.log?s=status&n=3");
 
   expect(page1Response.status).toEqual(200);
-  const page1 = (await page1Response.json()) as ResponseBody;
+  const page1 = (await page1Response.json()) as SearchResponse;
 
   // matching entries returned up to limit
   expect(page1.entries).toHaveLength(3);
 
   // returned in reverse order
-  expect(page1.entries[0]).toEqual(
+  expect(page1.entries[0].entry).toEqual(
     "2025-03-17 14:17:29 status installed libc-bin:amd64 2.36-9+deb12u10"
   );
-  expect(page1.entries[2]).toEqual(
+  expect(page1.entries[2].entry).toEqual(
     "2025-03-17 14:17:26 status installed man-db:amd64 2.11.2-2"
   );
 
@@ -86,16 +81,16 @@ Deno.test("filter, limit, and paginate", async () => {
   );
 
   expect(page2Response.status).toEqual(200);
-  const page2 = (await page2Response.json()) as ResponseBody;
+  const page2 = (await page2Response.json()) as SearchResponse;
 
   // matching entries returned up to limit
   expect(page2.entries).toHaveLength(3);
 
   // returned in reverse order
-  expect(page2.entries[0]).toEqual(
+  expect(page2.entries[0].entry).toEqual(
     "2025-03-17 14:17:25 status half-configured man-db:amd64 2.11.2-2"
   );
-  expect(page2.entries[2]).toEqual(
+  expect(page2.entries[2].entry).toEqual(
     "2025-03-17 14:17:22 status half-configured gettext:amd64 0.21-12"
   );
 
@@ -107,13 +102,13 @@ Deno.test("filter, limit, and paginate", async () => {
   );
 
   expect(page3Response.status).toEqual(200);
-  const page3 = (await page3Response.json()) as ResponseBody;
+  const page3 = (await page3Response.json()) as SearchResponse;
 
   // matching entries returned up to limit
   expect(page3.entries).toHaveLength(1);
 
   // returned in reverse order
-  expect(page3.entries[0]).toEqual(
+  expect(page3.entries[0].entry).toEqual(
     "2025-03-17 14:17:21 status unpacked gettext:amd64 0.21-12"
   );
 
@@ -149,7 +144,7 @@ Deno.test("global max results", async () => {
   const response = await makeRequest(`/fodder/long.log?n=1000`);
 
   expect(response.status).toEqual(200);
-  const { entries } = (await response.json()) as ResponseBody;
+  const { entries } = (await response.json()) as SearchResponse;
 
   // all entries returned up to limit
   expect(entries).toHaveLength(100);

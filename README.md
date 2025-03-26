@@ -37,16 +37,16 @@ Once the server is running, you can test it using curl:
 
 ```
 # View most recent entries in a log file
-curl http://localhost:1065/simple.log
+curl http://localhost:1065/fodder/simple.log
 
 # Limit the number of results returned
-curl http://localhost:1065/simple.log?n=10
+curl http://localhost:1065/fodder/simple.log?n=10
 
 # Search for a keyword
-curl http://localhost:1065/simple.log?s=installed
+curl http://localhost:1065/fodder/simple.log?s=installed
 
 # Continue to next page
-curl http://localhost:1065/simple.log?cont=continuation_token_from_previous_response
+curl http://localhost:1065/fodder/simple.log?cont=continuation_token_from_previous_response
 ```
 
 ## Operation Modes
@@ -96,15 +96,21 @@ Where `<logfile>` is the name of the log file to query (e.g., `system.log`,
 
 ### Query Parameters
 
+To start a new search:
+
 | Parameter | Description                                                     | Example                        |
 | --------- | --------------------------------------------------------------- | ------------------------------ |
 | `n`       | _(optional)_ Maximum number of entries to return (default: 100) | `?n=20`                        |
 | `s`       | _(optional)_ Search text to filter log entries                  | `?s=error`                     |
+
+Or to continue to further pages from a search result:
+
+| Parameter | Description                                                     | Example                        |
+| --------- | --------------------------------------------------------------- | ------------------------------ |
 | `cont`    | Continuation token for pagination                               | `?cont=eyJyZXN1bWVGcm9tIjo...` |
 
 Notes:
 
-- When using `cont`, do not include other parameters
 - Maximum allowed value for `n` is 100
 - In aggregator mode, results from all hosts are combined
 
@@ -113,8 +119,12 @@ Notes:
 ```json
 {
   "entries": [
-    "2023-07-15T14:23:45 INFO Application started",
-    "2023-07-15T14:23:44 INFO Loading configuration"
+    {
+      "entry": "2023-07-15T14:23:45 INFO Application started"
+    },
+    {
+      "entry": "2023-07-15T14:23:44 INFO Loading configuration"
+    }
   ],
   "cont": "eyJyZXN1bWVGcm9tIjo..."
 }
@@ -216,7 +226,6 @@ This will:
 
 These are the things I would work on if I were building this out:
 
-- **(Showstopper)** Normal mode operation should return entries as objects instead of strings. Aggregator should be adapted to attach additional properties to the existing entry object. This will allow us to enhance our log processing to add additional structured data without api breakage.
 - https, signature-based authentication, authorization if needed
 - Review for any missing error handling
 - Load test and profile, instrument

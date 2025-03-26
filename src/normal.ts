@@ -11,6 +11,13 @@ import {
   validateSearchParams,
 } from "./util.ts";
 
+export type LogEntry = { entry: string } & Record<string, string>;
+
+export type SearchResponse = {
+  entries: LogEntry[];
+  cont?: string;
+};
+
 export async function searchLogHandler(request: Request) {
   if (request.method !== "GET") {
     return notFound();

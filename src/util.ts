@@ -1,5 +1,9 @@
 import type { SearchOptions } from "./scanner.ts";
 
+export type ErrorBody = {
+  error: string;
+};
+
 export const MAX_PATH_LENGTH = 1000;
 export const MAX_SEARCH_TEXT_LENGTH = 200;
 export const MAX_CONTINUATION_TOKEN_LENGTH = 200;
@@ -81,21 +85,24 @@ export function jsonResponse(data: unknown) {
 }
 
 export function notFound(msg: string = "Not Found") {
-  return new Response(JSON.stringify({ error: msg }) + "\n", {
+  const body: ErrorBody = { error: msg };
+  return new Response(JSON.stringify(body) + "\n", {
     status: 404,
     statusText: "Not Found",
   });
 }
 
 export function badRequest(msg: string = "Bad Request") {
-  return new Response(JSON.stringify({ error: msg }) + "\n", {
+  const body: ErrorBody = { error: msg };
+  return new Response(JSON.stringify(body) + "\n", {
     status: 400,
     statusText: "Bad Request",
   });
 }
 
 export function unexpected(msg: string = "Internal Server Error") {
-  return new Response(JSON.stringify({ error: msg }) + "\n", {
+  const body: ErrorBody = { error: msg };
+  return new Response(JSON.stringify(body) + "\n", {
     status: 500,
     statusText: "Internal Server Error",
   });
