@@ -56,7 +56,7 @@ export async function searchLog(
     if (!searchText || line.includes(searchText)) {
       // NOTE: A lot of leverage could be had if we could extract some structured data out of a log entry. This would take some time and testing and sample
       // data, but if I had bandwidth, I would try to extract things like the time (at least), and if I could identify the message portion, etc, etc.
-      entries.push(line);
+      entries.push({ entry: line });
 
       if (entries.length === maxResults) {
         break;

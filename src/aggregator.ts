@@ -3,23 +3,35 @@ import { decodeBase64, encodeBase64 } from "jsr:@std/encoding/base64";
 import type { SearchOptions } from "./scanner.ts";
 import {
   badRequest,
+  ErrorBody,
   jsonResponse,
   notFound,
   Utf8Decoder,
   validateAndNormalizeSearchOptions,
   validateSearchParams,
 } from "./util.ts";
+import { LogEntry, SearchResponse } from "./normal.ts";
 
-type SecondaryResult = {
-  host: string;
-  entries: { host: string; entry: string }[];
+type AggregatorResponse = {
+  messages: AggregatorMessage[];
+  entries: AggregatorLogEntry[];
   cont?: string;
 };
 
-type SecondaryQueryError = {
-  host: string;
-  error: string;
-};
+type AggregatorMessage = { message: string } & HostTag;
+
+type AggregatorLogEntry = LogEntry & HostTag;
+
+type SecondaryToken = { cont: string } & HostTag;
+
+type SecondaryResult = SearchResponse &
+  HostTag & {
+    entries: AggregatorLogEntry[];
+  };
+
+type SecondaryQueryError = ErrorBody & HostTag;
+
+type HostTag = { host: string };
 
 const GLOBAL_TIMEOUT = 5000;
 
@@ -86,9 +98,9 @@ export class Aggregator {
 
     const results = await Promise.all(requests);
 
-    const secondaryContinuations: { host: string; cont: string }[] = [];
-    let entries: { host: string; entry: string }[] = [];
-    const messages: { host: string; message: string }[] = [];
+    const messages: AggregatorMessage[] = [];
+    let entries: AggregatorLogEntry[] = [];
+    const secondaryContinuations: SecondaryToken[] = [];
 
     for (const result of results) {
       if ("error" in result) {
@@ -103,7 +115,7 @@ export class Aggregator {
       }
     }
 
-    const body = {
+    const body: AggregatorResponse = {
       messages,
       entries,
       ...(secondaryContinuations.length && {
@@ -114,8 +126,6 @@ export class Aggregator {
     return jsonResponse(body);
   }
 }
-
-type SecondaryToken = { host: string; cont: string };
 
 function muxContinuationTokens(secondaryTokens: SecondaryToken[]) {
   const json = JSON.stringify(secondaryTokens);
@@ -162,7 +172,7 @@ async function querySecondary(url: URL, host: string, signal: AbortSignal) {
     );
 
     if (response.status !== 200) {
-      const errBody: { error: string } = await response.json();
+      const errBody: ErrorBody = await response.json();
       const error: SecondaryQueryError = {
         host,
         error: errBody.error,
@@ -170,11 +180,11 @@ async function querySecondary(url: URL, host: string, signal: AbortSignal) {
       return error;
     }
 
-    const body: { entries: string[]; cont?: string } = await response.json();
+    const body: SearchResponse = await response.json();
 
     const result: SecondaryResult = {
       host,
-      entries: body.entries.map((entry) => ({ host, entry })),
+      entries: body.entries.map((entry) => ({ host, ...entry })),
       cont: body.cont,
     };
 
