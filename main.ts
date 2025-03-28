@@ -18,7 +18,7 @@ function main() {
   if (Deno.args.includes("--hosts")) {
     const hostsArgIndex = Deno.args.indexOf("--hosts");
     const hostListIndex = hostsArgIndex + 1;
-    if (Deno.args.length >= hostListIndex) {
+    if (hostListIndex >= Deno.args.length) {
       console.error("Missing hosts list.");
       printUsage();
       Deno.exit(1);
